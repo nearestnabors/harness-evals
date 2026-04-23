@@ -1,0 +1,228 @@
+"""
+Harness A: Implicit finish (Claude Code style)
+
+Finish condition: The model stops calling tools (no tool_calls in response).
+This is the simplest approach - the model decides when it's done.
+
+Usage:
+    python harness_a.py --provider anthropic --model claude-sonnet-4-20250514
+    python harness_a.py --provider openai --model gpt-4o
+"""
+
+import argparse
+import json
+
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.text import Text
+
+from models import (
+    ModelResponse,
+    Provider,
+    call_model,
+    format_assistant_message,
+    format_tool_result_message,
+    DEFAULT_MODELS,
+)
+from tools import tool_functions, tools_list, reset_tasks
+
+console = Console()
+
+# Default system prompt
+SYSTEM_PROMPT = """You are an agent that helps analyze AI system traces and spans.
+You have access to tools to search and analyze trace data.
+Be conversational and explain what you're doing as you work.
+When you have completed the user's request, provide your final answer."""
+
+# Default test prompt
+DEFAULT_PROMPT = "Can you find all the span ids that contain the word 'Aragorn', sort them by latency, multiply the latency by 314 and show the result in Markdown."
+
+
+def run(
+    prompt: str,
+    provider: Provider = "anthropic",
+    model: str | None = None,
+    system_prompt: str = SYSTEM_PROMPT,
+    max_iterations: int = 20,
+) -> dict:
+    """
+    Run the agent loop with implicit finish condition.
+
+    Loop:
+        1. Send messages to the model
+        2. If response has tool calls → execute them, append results, continue
+        3. If response has text but NO tool calls → print text and exit
+        4. Safety: max 20 iterations
+
+    Returns:
+        dict with keys:
+            - text: final response text
+            - iterations: number of loop iterations
+            - tool_calls_total: total number of tool calls made
+            - finished_reason: "no_tool_calls" or "max_iterations"
+    """
+    reset_tasks()
+
+    model = model or DEFAULT_MODELS[provider]
+    messages = [{"role": "user", "content": prompt}]
+
+    iterations = 0
+    tool_calls_total = 0
+    all_text = ""
+    finished_reason = "max_iterations"
+
+    # Log the start
+    console.print(Rule(style="white"))
+    console.print(Panel(prompt, title="[bold white]User Request[/bold white]", border_style="white"))
+    console.print(Rule(style="white"))
+    console.print(f"[dim]Provider: {provider} | Model: {model} | Max iterations: {max_iterations}[/dim]\n")
+
+    while iterations < max_iterations:
+        iterations += 1
+
+        # ─────────────────────────────────────────────────────────────
+        # Iteration header
+        # ─────────────────────────────────────────────────────────────
+        console.print(Rule(Text(f" Iteration {iterations} ", style="bold cyan"), style="cyan"))
+
+        # ─────────────────────────────────────────────────────────────
+        # Step 1: Send messages to the model
+        # ─────────────────────────────────────────────────────────────
+        response: ModelResponse = call_model(
+            provider=provider,
+            model=model,
+            messages=messages,
+            tools=tools_list,
+            system_prompt=system_prompt,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # Log what the model said (narration)
+        # ─────────────────────────────────────────────────────────────
+        if response.text:
+            console.print(Text("🤖 Assistant (narration):", style="bold green"))
+            console.print(Markdown(response.text))
+            console.print()
+            all_text += response.text + "\n"
+
+        # ─────────────────────────────────────────────────────────────
+        # Step 3: If NO tool calls → exit
+        # ─────────────────────────────────────────────────────────────
+        if not response.tool_calls:
+            console.print(Text("✅ EXIT: No tool calls in response", style="bold green"))
+            finished_reason = "no_tool_calls"
+            break
+
+        # ─────────────────────────────────────────────────────────────
+        # Log tool calls (action)
+        # ─────────────────────────────────────────────────────────────
+        console.print(Text(f"🛠️  Tool calls ({len(response.tool_calls)}):", style="bold yellow"))
+
+        # Add assistant message to history (before executing tools)
+        messages.append(format_assistant_message(provider, response))
+
+        # ─────────────────────────────────────────────────────────────
+        # Step 2: Execute tool calls, append results, continue
+        # ─────────────────────────────────────────────────────────────
+        for tool_call in response.tool_calls:
+            tool_calls_total += 1
+            name = tool_call.name
+            args = tool_call.arguments
+
+            # Log the tool call
+            console.print(f"   [yellow]→ {name}[/yellow]")
+            args_str = json.dumps(args, indent=2)
+            if len(args_str) > 200:
+                args_str = args_str[:200] + "..."
+            console.print(f"     [dim]Input:[/dim] {args_str}")
+
+            # Execute the tool
+            if name in tool_functions:
+                try:
+                    result = tool_functions[name](**args)
+                except Exception as e:
+                    result = f"Error: {e}"
+            else:
+                result = f"Unknown tool: {name}"
+
+            # Log the result
+            result_str = str(result)
+            if len(result_str) > 300:
+                result_preview = result_str[:300] + "..."
+            else:
+                result_preview = result_str
+            console.print(f"     [dim]Result:[/dim] {result_preview}")
+
+            # Append tool result to messages
+            messages.append(
+                format_tool_result_message(provider, tool_call.id, name, str(result))
+            )
+
+        console.print()  # Blank line before next iteration
+
+    # ─────────────────────────────────────────────────────────────
+    # Final summary
+    # ─────────────────────────────────────────────────────────────
+    console.print(Rule(style="white"))
+
+    if finished_reason == "max_iterations":
+        console.print(Text(f"⚠️  EXIT: Max iterations ({max_iterations}) reached", style="bold red"))
+
+    console.print(Panel(
+        f"[bold]Iterations:[/bold] {iterations}\n"
+        f"[bold]Tool calls:[/bold] {tool_calls_total}\n"
+        f"[bold]Finished:[/bold] {finished_reason}",
+        title="[bold]Summary[/bold]",
+        border_style="cyan",
+    ))
+
+    return {
+        "text": all_text.strip(),
+        "iterations": iterations,
+        "tool_calls_total": tool_calls_total,
+        "finished_reason": finished_reason,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Harness A: Implicit finish (Claude Code style)"
+    )
+    parser.add_argument(
+        "--provider", "-p",
+        choices=["anthropic", "openai"],
+        default="anthropic",
+        help="Model provider (default: anthropic)",
+    )
+    parser.add_argument(
+        "--model", "-m",
+        help="Model name (default: provider's default)",
+    )
+    parser.add_argument(
+        "--prompt", "-P",
+        default=DEFAULT_PROMPT,
+        help="Prompt to send to the model",
+    )
+    parser.add_argument(
+        "--max-iterations", "-i",
+        type=int,
+        default=20,
+        help="Max iterations before forced exit (default: 20)",
+    )
+
+    args = parser.parse_args()
+
+    result = run(
+        prompt=args.prompt,
+        provider=args.provider,
+        model=args.model,
+        max_iterations=args.max_iterations,
+    )
+
+    return result
+
+
+if __name__ == "__main__":
+    main()

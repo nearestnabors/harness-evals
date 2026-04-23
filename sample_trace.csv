@@ -1,0 +1,5 @@
+,name,latencyMs,input.value,id
+0,"ChannelWrite<generate,question,context,answer>",0.243712,Aragorn,"aaa"
+1,ChatAnthropic,1922.038016,Legolas,"bbb"
+2,ChatPromptTemplate,0.194048,Frodo,"ccc"
+3,generate,1923.51488,Aragorn,"ddd"
