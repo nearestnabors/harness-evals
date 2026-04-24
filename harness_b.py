@@ -44,7 +44,10 @@ from models import (
     format_tool_result_message,
     DEFAULT_MODELS,
 )
-from tools import tool_functions, tools_list, reset_tasks, TASKS
+from tools import tool_functions as default_tool_functions
+from tools import tools_list as default_tools_list
+from tools import reset_tasks as default_reset_tasks
+from tools import TASKS
 
 console = Console()
 
@@ -106,6 +109,8 @@ def run(
     system_prompt: str = SYSTEM_PROMPT,
     max_iterations: int = 20,
     max_finish_attempts: int = 3,
+    tools_list: list | None = None,
+    tool_functions: dict | None = None,
 ) -> dict:
     """
     Run the agent loop with explicit finish requirement.
@@ -120,13 +125,18 @@ def run(
     Returns:
         dict with results
     """
-    reset_tasks()
+    # Use provided tools or defaults
+    _tools_list = tools_list if tools_list is not None else default_tools_list
+    _tool_functions = tool_functions if tool_functions is not None else default_tool_functions
+    _reset_tasks = default_reset_tasks
+
+    _reset_tasks()
 
     model = model or DEFAULT_MODELS[provider]
     messages = [{"role": "user", "content": prompt}]
 
     # Add finish tool to the tool set
-    harness_tools = tools_list + [FINISH_TOOL]
+    harness_tools = _tools_list + [FINISH_TOOL]
 
     iterations = 0
     tool_calls_total = 0
@@ -284,9 +294,9 @@ def run(
                     # Execute regular tools with tracing
                     # ─────────────────────────────────────────────────────────
                     with tool_span(name, args) as t_span:
-                        if name in tool_functions:
+                        if name in _tool_functions:
                             try:
-                                result = tool_functions[name](**args)
+                                result = _tool_functions[name](**args)
                             except Exception as e:
                                 result = f"Error: {e}"
                         else:

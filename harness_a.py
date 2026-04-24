@@ -39,7 +39,9 @@ from models import (
     format_tool_result_message,
     DEFAULT_MODELS,
 )
-from tools import tool_functions, tools_list, reset_tasks
+from tools import tool_functions as default_tool_functions
+from tools import tools_list as default_tools_list
+from tools import reset_tasks as default_reset_tasks
 
 console = Console()
 
@@ -59,6 +61,8 @@ def run(
     model: str | None = None,
     system_prompt: str = SYSTEM_PROMPT,
     max_iterations: int = 20,
+    tools_list: list | None = None,
+    tool_functions: dict | None = None,
 ) -> dict:
     """
     Run the agent loop with implicit finish condition.
@@ -76,7 +80,12 @@ def run(
             - tool_calls_total: total number of tool calls made
             - finished_reason: "no_tool_calls" or "max_iterations"
     """
-    reset_tasks()
+    # Use provided tools or defaults
+    _tools_list = tools_list if tools_list is not None else default_tools_list
+    _tool_functions = tool_functions if tool_functions is not None else default_tool_functions
+    _reset_tasks = default_reset_tasks
+
+    _reset_tasks()
 
     model = model or DEFAULT_MODELS[provider]
     messages = [{"role": "user", "content": prompt}]
@@ -126,7 +135,7 @@ def run(
                     provider=provider,
                     model=model,
                     messages=messages,
-                    tools=tools_list,
+                    tools=_tools_list,
                     system_prompt=system_prompt,
                 )
 
@@ -180,9 +189,9 @@ def run(
 
                     # Execute the tool with tracing
                     with tool_span(name, args) as t_span:
-                        if name in tool_functions:
+                        if name in _tool_functions:
                             try:
-                                result = tool_functions[name](**args)
+                                result = _tool_functions[name](**args)
                             except Exception as e:
                                 result = f"Error: {e}"
                         else:
