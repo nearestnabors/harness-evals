@@ -133,6 +133,33 @@ def _count_incomplete_todos() -> int:
     return sum(1 for task in TASKS if task.get("status") != "completed")
 
 
+def _get_escalating_nudge(false_finish_count: int, matched_phrases: list[str]) -> str:
+    """
+    Generate an escalating nudge based on how many consecutive false finishes.
+
+    Level 1: Gentle reminder
+    Level 2: Quote what they said, ask them to act
+    Level 3: Direct instruction to act or finish
+    """
+    # Get the first matched phrase for quoting
+    phrase = matched_phrases[0] if matched_phrases else "you would take an action"
+
+    if false_finish_count == 1:
+        # Gentle
+        return "Continue with your plan."
+
+    elif false_finish_count == 2:
+        # Quote what they said
+        return f'You said "{phrase}" but didn\'t call any tools. Please execute the action now.'
+
+    else:
+        # Direct instruction
+        return (
+            "IMPORTANT: You must either call a tool to take action, or provide your "
+            "final answer. Do not describe what you will do - just do it."
+        )
+
+
 def run(
     prompt: str,
     provider: Provider = "anthropic",
@@ -260,9 +287,9 @@ def run(
                             )
                             break
 
-                        # Inject nudge to continue
-                        nudge = "Continue with your plan."
-                        console.print(Text(f"   💬 NUDGE: {nudge}", style="bold magenta"))
+                        # Inject escalating nudge to continue
+                        nudge = _get_escalating_nudge(false_finish_count, matched_phrases)
+                        console.print(Text(f"   💬 NUDGE ({false_finish_count}/3): {nudge}", style="bold magenta"))
 
                         messages.append(format_assistant_message(provider, response))
                         messages.append({"role": "user", "content": nudge})
