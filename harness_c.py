@@ -106,6 +106,32 @@ NARRATE_PATTERNS_COMPILED = [
     re.compile(pattern, re.IGNORECASE) for pattern in NARRATE_THEN_ACT_PATTERNS
 ]
 
+# Completion signals - if these appear, the model is likely done (not a false finish)
+COMPLETION_SIGNALS = [
+    r"\bFinal\s+Answer\b",
+    r"\bThe\s+answer\s+is\b",
+    r"\bIn\s+conclusion\b",
+    r"\bTo\s+summarize\b",
+    r"\bIn\s+summary\b",
+    r"\b✅\b",  # Checkmark emoji often used in summaries
+    r"\bhas\s+been\s+(fully\s+)?answered\b",
+    r"\bquestion\s+has\s+been\s+(fully\s+)?(answered|solved|completed)\b",
+    r"\btask\s+is\s+complete\b",
+    r"\bsolution\s+is\s+complete\b",
+]
+
+COMPLETION_PATTERNS_COMPILED = [
+    re.compile(pattern, re.IGNORECASE) for pattern in COMPLETION_SIGNALS
+]
+
+
+def _has_completion_signal(text: str) -> bool:
+    """Check if text contains signals that the model believes it's done."""
+    for pattern in COMPLETION_PATTERNS_COMPILED:
+        if pattern.search(text):
+            return True
+    return False
+
 
 def detect_narrate_then_act(text: str) -> tuple[bool, list[str]]:
     """
@@ -115,6 +141,10 @@ def detect_narrate_then_act(text: str) -> tuple[bool, list[str]]:
         (detected, matched_phrases) - whether detected and what phrases matched
     """
     if not text:
+        return False, []
+
+    # First check: if there's a completion signal, the model is done - not a false finish
+    if _has_completion_signal(text):
         return False, []
 
     matched = []
