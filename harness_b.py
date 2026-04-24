@@ -131,6 +131,8 @@ def run(
     iterations = 0
     tool_calls_total = 0
     finish_attempts = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
     all_text = ""
     finished_reason = "max_iterations"
 
@@ -175,6 +177,10 @@ def run(
                     tools=harness_tools,
                     system_prompt=system_prompt,
                 )
+
+                # Accumulate token usage
+                total_input_tokens += response.tokens.input_tokens
+                total_output_tokens += response.tokens.output_tokens
 
                 # ─────────────────────────────────────────────────────────────
                 # Log what the model said (narration)
@@ -318,9 +324,13 @@ def run(
         # Count abandoned todos
         todos_abandoned = _count_incomplete_todos()
 
+        # Count failed finish attempts as false finishes
+        false_finishes = max(0, finish_attempts - 1) if finished_reason == "finish_validated" else finish_attempts
+
         console.print(Panel(
             f"[bold]Iterations:[/bold] {iterations}\n"
             f"[bold]Tool calls:[/bold] {tool_calls_total}\n"
+            f"[bold]Tokens:[/bold] {total_input_tokens + total_output_tokens:,} ({total_input_tokens:,} in / {total_output_tokens:,} out)\n"
             f"[bold]Finish attempts:[/bold] {finish_attempts}\n"
             f"[bold]Todos abandoned:[/bold] {todos_abandoned}\n"
             f"[bold]Finished:[/bold] {finished_reason}",
@@ -337,6 +347,12 @@ def run(
         "text": all_text.strip(),
         "iterations": iterations,
         "tool_calls_total": tool_calls_total,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+        "false_finishes": false_finishes,
+        "narrate_then_act": 0,  # Harness B doesn't track narrate-then-act
+        "task_complete": finished_reason == "finish_validated",
         "finish_attempts": finish_attempts,
         "todos_abandoned": todos_abandoned,
         "finished_reason": finished_reason,

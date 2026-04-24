@@ -1,6 +1,6 @@
 """
 Model provider abstraction for Anthropic and OpenAI.
-Returns responses in a common format: { text: str, tool_calls: list }
+Returns responses in a common format: { text: str, tool_calls: list, tokens: TokenUsage }
 """
 
 import os
@@ -24,11 +24,24 @@ class ToolCall:
 
 
 @dataclass
+class TokenUsage:
+    """Token usage from a single API call."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
+@dataclass
 class ModelResponse:
     """Common response format across providers."""
 
     text: str
     tool_calls: list[ToolCall] = field(default_factory=list)
+    tokens: TokenUsage = field(default_factory=TokenUsage)
     raw_response: Any = None  # Original response for debugging
 
 
@@ -97,9 +110,16 @@ def _parse_anthropic_response(response) -> ModelResponse:
                 )
             )
 
+    # Extract token usage
+    tokens = TokenUsage(
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+    )
+
     return ModelResponse(
         text="\n".join(text_parts),
         tool_calls=tool_calls,
+        tokens=tokens,
         raw_response=response,
     )
 
@@ -126,9 +146,16 @@ def _parse_openai_response(response) -> ModelResponse:
                 )
             )
 
+    # Extract token usage
+    tokens = TokenUsage(
+        input_tokens=response.usage.prompt_tokens,
+        output_tokens=response.usage.completion_tokens,
+    )
+
     return ModelResponse(
         text=text,
         tool_calls=tool_calls,
+        tokens=tokens,
         raw_response=response,
     )
 
@@ -155,7 +182,7 @@ def call_model(
         max_tokens: Maximum tokens in response
 
     Returns:
-        ModelResponse with text, tool_calls, and raw_response
+        ModelResponse with text, tool_calls, tokens, and raw_response
     """
     client = get_client(provider)
 
@@ -241,6 +268,12 @@ def format_assistant_message(provider: Provider, response: ModelResponse) -> dic
 
 # Default models for each provider
 DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-4-20250514",
+    "openai": "gpt-4o",
+}
+
+# Models to use in eval matrix
+EVAL_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
     "openai": "gpt-4o",
 }

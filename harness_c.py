@@ -162,6 +162,8 @@ def run(
     tool_calls_total = 0
     false_finish_count = 0  # Consecutive false finishes
     total_false_finishes = 0  # Total false finishes detected
+    total_input_tokens = 0
+    total_output_tokens = 0
     all_text = ""
     finished_reason = "max_iterations"
 
@@ -206,6 +208,10 @@ def run(
                     tools=tools_list,
                     system_prompt=system_prompt,
                 )
+
+                # Accumulate token usage
+                total_input_tokens += response.tokens.input_tokens
+                total_output_tokens += response.tokens.output_tokens
 
                 # ─────────────────────────────────────────────────────────────
                 # Log what the model said (narration)
@@ -333,7 +339,8 @@ def run(
         console.print(Panel(
             f"[bold]Iterations:[/bold] {iterations}\n"
             f"[bold]Tool calls:[/bold] {tool_calls_total}\n"
-            f"[bold]False finishes detected:[/bold] {total_false_finishes}\n"
+            f"[bold]Tokens:[/bold] {total_input_tokens + total_output_tokens:,} ({total_input_tokens:,} in / {total_output_tokens:,} out)\n"
+            f"[bold]False finishes (narrate-then-act):[/bold] {total_false_finishes}\n"
             f"[bold]Todos abandoned:[/bold] {todos_abandoned}\n"
             f"[bold]Finished:[/bold] {finished_reason}",
             title="[bold]Summary[/bold]",
@@ -349,7 +356,12 @@ def run(
         "text": all_text.strip(),
         "iterations": iterations,
         "tool_calls_total": tool_calls_total,
-        "false_finishes_detected": total_false_finishes,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+        "false_finishes": total_false_finishes,
+        "narrate_then_act": total_false_finishes,  # In harness C, these are the same
+        "task_complete": finished_reason == "genuine_completion",
         "todos_abandoned": todos_abandoned,
         "finished_reason": finished_reason,
     }

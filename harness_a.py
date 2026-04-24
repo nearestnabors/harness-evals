@@ -83,6 +83,8 @@ def run(
 
     iterations = 0
     tool_calls_total = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
     all_text = ""
     finished_reason = "max_iterations"
 
@@ -127,6 +129,10 @@ def run(
                     tools=tools_list,
                     system_prompt=system_prompt,
                 )
+
+                # Accumulate token usage
+                total_input_tokens += response.tokens.input_tokens
+                total_output_tokens += response.tokens.output_tokens
 
                 # ─────────────────────────────────────────────────────────────
                 # Log what the model said (narration)
@@ -211,6 +217,7 @@ def run(
         console.print(Panel(
             f"[bold]Iterations:[/bold] {iterations}\n"
             f"[bold]Tool calls:[/bold] {tool_calls_total}\n"
+            f"[bold]Tokens:[/bold] {total_input_tokens + total_output_tokens:,} ({total_input_tokens:,} in / {total_output_tokens:,} out)\n"
             f"[bold]Finished:[/bold] {finished_reason}",
             title="[bold]Summary[/bold]",
             border_style="cyan",
@@ -224,6 +231,12 @@ def run(
         "text": all_text.strip(),
         "iterations": iterations,
         "tool_calls_total": tool_calls_total,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+        "false_finishes": 0,  # Harness A doesn't track false finishes
+        "narrate_then_act": 0,  # Harness A doesn't track narrate-then-act
+        "task_complete": finished_reason == "no_tool_calls",
         "finished_reason": finished_reason,
     }
 
