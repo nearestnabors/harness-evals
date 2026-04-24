@@ -40,12 +40,48 @@ python -m venv venv
 source venv/bin/activate
 
 # Install dependencies
-pip install anthropic openai python-dotenv pandas rich
+pip install anthropic openai python-dotenv pandas rich arize-phoenix openinference-instrumentation-anthropic openinference-instrumentation-openai
 
 # Configure API keys
 cp .env.example .env
 # Edit .env with your keys
 ```
+
+## Tracing
+
+All harness runs are automatically traced to a **local Phoenix server** at http://localhost:6006.
+
+Traces include:
+- **CHAIN spans** for each agent run and iteration
+- **LLM spans** (auto-instrumented) for each API call
+- **TOOL spans** for each tool invocation with input/output
+
+### Custom Attributes
+
+Each span includes custom attributes for eval analysis:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `harness_type` | string | "implicit" \| "explicit" \| "adaptive" |
+| `model_provider` | string | "anthropic" \| "openai" |
+| `model_name` | string | Specific model used |
+| `iteration_number` | int | Which loop iteration (1-indexed) |
+| `finish_triggered` | bool | Did this iteration trigger a finish? |
+| `false_finish` | bool | Was a false finish detected? |
+| `narrate_then_act` | bool | Did model narrate without acting? |
+| `task_complete` | bool | Was task actually done at exit? |
+| `todos_abandoned` | int | Incomplete todos at exit (B/C only) |
+
+### Viewing Traces
+
+Start Phoenix in a separate terminal first:
+
+```bash
+source venv/bin/activate
+python -m phoenix.server.main serve
+```
+
+Then run harnesses in another terminal. Open http://localhost:6006 to see your traces.
 
 ## Usage
 

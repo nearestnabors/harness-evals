@@ -1,11 +1,17 @@
 """
 Eval runner: runs all harness × provider combinations and collects results.
+
+Traces are automatically sent to Arize/Phoenix when ARIZE_API_KEY and
+ARIZE_SPACE_ID environment variables are set.
 """
 
 import argparse
 import json
 from datetime import datetime
 from typing import Any
+
+# Initialize tracing BEFORE importing harnesses (which import models)
+from instrumentation import init_tracing, shutdown_tracing
 
 import harness_a
 import harness_b
@@ -15,7 +21,7 @@ from models import DEFAULT_MODELS, Provider
 # Available harnesses
 HARNESSES = {
     "a": ("implicit", harness_a),
-    "b": ("explicit_todo", harness_b),
+    "b": ("explicit", harness_b),
     "c": ("adaptive", harness_c),
 }
 
@@ -36,7 +42,6 @@ def run_single(
     provider: Provider,
     prompt: str,
     model: str | None = None,
-    verbose: bool = False,
 ) -> dict[str, Any]:
     """Run a single harness with a single provider and prompt."""
     _, harness_module = HARNESSES[harness_name]
@@ -45,7 +50,6 @@ def run_single(
         prompt=prompt,
         provider=provider,
         model=model,
-        verbose=verbose,
     )
 
     return {
@@ -61,7 +65,6 @@ def run_eval(
     prompts: list[str] | None = None,
     harnesses: list[str] | None = None,
     providers: list[Provider] | None = None,
-    verbose: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Run evaluation across all combinations.
@@ -70,7 +73,6 @@ def run_eval(
         prompts: List of prompts to test (defaults to DEFAULT_PROMPTS)
         harnesses: List of harness names to test (defaults to all)
         providers: List of providers to test (defaults to all)
-        verbose: Print detailed output
 
     Returns:
         List of result dicts
@@ -97,7 +99,6 @@ def run_eval(
                         harness_name=harness_name,
                         provider=provider,
                         prompt=prompt,
-                        verbose=verbose,
                     )
                     results.append(result)
 
@@ -142,63 +143,70 @@ def main():
         help="Custom prompt(s) to test",
     )
     parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Print detailed output",
-    )
-    parser.add_argument(
         "--output",
         "-o",
         help="Output file for results (JSON)",
     )
+    parser.add_argument(
+        "--project",
+        default="harness-evals",
+        help="Arize/Phoenix project name (default: harness-evals)",
+    )
 
     args = parser.parse_args()
 
-    results = run_eval(
-        prompts=args.prompt,
-        harnesses=args.harness,
-        providers=args.provider,
-        verbose=args.verbose,
-    )
+    # Initialize tracing before running evals
+    init_tracing(project_name=args.project)
 
-    # Summary
-    print("\n" + "=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
+    try:
+        results = run_eval(
+            prompts=args.prompt,
+            harnesses=args.harness,
+            providers=args.provider,
+        )
 
-    for harness_name in args.harness or list(HARNESSES.keys()):
-        harness_label, _ = HARNESSES[harness_name]
-        harness_results = [r for r in results if r.get("harness") == harness_name]
+        # Summary
+        print("\n" + "=" * 60)
+        print("SUMMARY")
+        print("=" * 60)
 
-        if not harness_results:
-            continue
+        for harness_name in args.harness or list(HARNESSES.keys()):
+            harness_label, _ = HARNESSES[harness_name]
+            harness_results = [r for r in results if r.get("harness") == harness_name]
 
-        print(f"\n{harness_label}:")
-        for provider in args.provider or PROVIDERS:
-            provider_results = [r for r in harness_results if r.get("provider") == provider]
-            if not provider_results:
+            if not harness_results:
                 continue
 
-            avg_iterations = sum(r.get("iterations", 0) for r in provider_results) / len(
-                provider_results
-            )
-            avg_tools = sum(r.get("tool_calls_total", 0) for r in provider_results) / len(
-                provider_results
-            )
-            errors = sum(1 for r in provider_results if "error" in r)
+            print(f"\n{harness_label}:")
+            for provider in args.provider or PROVIDERS:
+                provider_results = [r for r in harness_results if r.get("provider") == provider]
+                if not provider_results:
+                    continue
 
-            print(f"  {provider}: avg_iter={avg_iterations:.1f}, avg_tools={avg_tools:.1f}, errors={errors}")
+                avg_iterations = sum(r.get("iterations", 0) for r in provider_results) / len(
+                    provider_results
+                )
+                avg_tools = sum(r.get("tool_calls_total", 0) for r in provider_results) / len(
+                    provider_results
+                )
+                errors = sum(1 for r in provider_results if "error" in r)
 
-    # Save results
-    if args.output:
-        output = {
-            "timestamp": datetime.now().isoformat(),
-            "results": results,
-        }
-        with open(args.output, "w") as f:
-            json.dump(output, f, indent=2)
-        print(f"\nResults saved to {args.output}")
+                print(f"  {provider}: avg_iter={avg_iterations:.1f}, avg_tools={avg_tools:.1f}, errors={errors}")
+
+        # Save results
+        if args.output:
+            output = {
+                "timestamp": datetime.now().isoformat(),
+                "project": args.project,
+                "results": results,
+            }
+            with open(args.output, "w") as f:
+                json.dump(output, f, indent=2)
+            print(f"\nResults saved to {args.output}")
+
+    finally:
+        # Always flush traces before exit
+        shutdown_tracing()
 
 
 if __name__ == "__main__":
