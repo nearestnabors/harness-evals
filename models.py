@@ -269,11 +269,11 @@ def format_assistant_message(provider: Provider, response: ModelResponse) -> dic
 # Default models for each provider
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
-    "openai": "gpt-5.4",
+    "openai": "gpt-4o",
 }
 
 # Models to use in eval matrix
 EVAL_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
-    "openai": "gpt-5.4",
+    "openai": "gpt-4o",
 }
