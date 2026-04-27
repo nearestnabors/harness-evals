@@ -6,32 +6,31 @@ Evaluates different agent loop finish conditions across model providers.
 
 ```
 harness-evals/
-├── harness_a.py      # Implicit finish (Claude Code style)
-├── harness_b.py      # Explicit finish with finish() tool
-├── harness_c.py      # Adaptive finish (hybrid with smart detection)
-├── tools.py          # Mock trace/span tools (default)
-├── tools_gaia.py     # Real tools: web search, calculator, Wikipedia
-├── gaia_loader.py    # GAIA benchmark task loader
-├── models.py         # Model provider abstraction (anthropic + openai)
-├── run_eval.py       # Run eval matrix with mock tools
-├── run_gaia.py       # Run GAIA benchmark with real tools
-├── instrumentation.py # Phoenix tracing setup
+├── harness_implicit.py   # Implicit finish (no tool calls = done)
+├── harness_explicit.py   # Explicit finish (requires finish() tool)
+├── harness_adaptive.py   # Adaptive finish (detects false finishes)
+├── tools.py              # Web search, Wikipedia, calculator
+├── eval_tasks.py         # Multi-step evaluation tasks
+├── models.py             # Model provider abstraction (Anthropic + OpenAI)
+├── evals.py              # Quick single-prompt evaluation
+├── run_benchmark.py      # Full benchmark suite
+├── instrumentation.py    # Phoenix tracing setup
 └── README.md
 ```
 
 ## Harness Descriptions
 
-### Harness A: Implicit Finish
+### Implicit Finish (`harness_implicit.py`)
 **Finish condition:** Model stops calling tools.
 
 The simplest approach — the model decides when it's done by simply not requesting any more tool calls. Cheap and effective, but can't catch premature exits.
 
-### Harness B: Explicit Finish
+### Explicit Finish (`harness_explicit.py`)
 **Finish condition:** Model must call `finish()` tool.
 
 Forces the model to explicitly signal completion. Adds ~5% token overhead but provides clear intent.
 
-### Harness C: Adaptive Finish
+### Adaptive Finish (`harness_adaptive.py`)
 **Finish condition:** Smart detection of genuine completion vs. false finishes.
 
 Hybrid approach that:
@@ -39,18 +38,6 @@ Hybrid approach that:
 2. Recognizes completion signals ("Final Answer:", checkmarks, etc.)
 3. Uses escalating nudges when stuck
 4. Falls back to force-exit after 3 consecutive false finishes
-
-## Results Summary
-
-Tested on GAIA-style benchmark tasks (multi-step reasoning with web search, Wikipedia, calculator):
-
-| Harness | Completion | Correct | Avg Iters | Tokens | Notes |
-|---------|------------|---------|-----------|--------|-------|
-| **A** (Implicit) | 100% | 2/5 | 5.8 | 67,065 | Simple, no safety net |
-| **B** (Explicit) | 100% | 2/5 | 6.0 | 70,278 | +5% overhead from finish() |
-| **C** (Adaptive) | 100% | 2/5 | 5.8 | 64,932 | Smart detection, slight efficiency gain |
-
-**Key finding:** Harness C matches or beats A's efficiency while providing safety guarantees against false finishes.
 
 ## Setup
 
@@ -62,7 +49,7 @@ source venv/bin/activate
 # Install dependencies
 pip install anthropic openai python-dotenv rich \
     arize-phoenix openinference-instrumentation-anthropic openinference-instrumentation-openai \
-    tavily-python datasets  # For GAIA benchmark
+    tavily-python wikipedia
 
 # Configure API keys
 cp .env.example .env
@@ -70,17 +57,62 @@ cp .env.example .env
 #   ANTHROPIC_API_KEY - required
 #   OPENAI_API_KEY - required for OpenAI models
 #   TAVILY_API_KEY - required for web search (get free at tavily.com)
-#   HF_TOKEN - optional, for real GAIA tasks from HuggingFace
+```
+
+## Usage
+
+### Quick Test (single prompt)
+
+```bash
+# All harnesses with Anthropic
+python evals.py
+
+# Both providers
+python evals.py --provider both
+
+# Specific harness with verbose output
+python evals.py --harness adaptive -v
+
+# Custom prompt
+python evals.py -P "What is 2+2? Use the calculator."
+```
+
+### Full Benchmark
+
+```bash
+# All harnesses, Anthropic only
+python run_benchmark.py
+
+# Both providers (full matrix)
+python run_benchmark.py --provider both
+
+# Specific harness
+python run_benchmark.py --harness adaptive
+
+# Limit tasks
+python run_benchmark.py --max-tasks 3
+```
+
+### Run Individual Harness
+
+```bash
+python harness_implicit.py
+python harness_explicit.py
+python harness_adaptive.py
 ```
 
 ## Tracing
 
 All harness runs are automatically traced to a **local Phoenix server** at http://localhost:6006.
 
-Traces include:
-- **CHAIN spans** for each agent run and iteration
-- **LLM spans** (auto-instrumented) for each API call
-- **TOOL spans** for each tool invocation with input/output
+### Start Phoenix
+
+```bash
+source venv/bin/activate
+python -m phoenix.server.main serve
+```
+
+Then run harnesses in another terminal. Open http://localhost:6006 to see your traces.
 
 ### Custom Attributes
 
@@ -96,70 +128,14 @@ Each span includes custom attributes for eval analysis:
 | `false_finish` | bool | Was a false finish detected? |
 | `narrate_then_act` | bool | Did model narrate without acting? |
 | `task_complete` | bool | Was task actually done at exit? |
-| `todos_abandoned` | int | Incomplete todos at exit (B/C only) |
 
-### Viewing Traces
-
-Start Phoenix in a separate terminal first:
-
-```bash
-source venv/bin/activate
-python -m phoenix.server.main serve
-```
-
-Then run harnesses in another terminal. Open http://localhost:6006 to see your traces.
-
-## Usage
-
-### GAIA Benchmark (recommended)
-
-Run with sample tasks (no HuggingFace access needed):
-```bash
-# All harnesses
-python run_gaia.py --sample
-
-# Single harness
-python run_gaia.py --sample --harness C
-
-# With OpenAI
-python run_gaia.py --sample --provider openai
-```
-
-Run with real GAIA tasks (requires HF_TOKEN):
-```bash
-python run_gaia.py --level 1 --max-tasks 5
-```
-
-### Mock Tools (original eval)
-
-```bash
-# All combinations
-python run_eval.py
-
-# Specific harness/provider
-python run_eval.py -H a -p anthropic
-
-# Multiple trials
-python run_eval.py --trials 3
-```
-
-### Run individual harness directly
-```bash
-python harness_a.py
-python harness_b.py
-python harness_c.py
-```
-
-## GAIA Tools
-
-Real tools for benchmark tasks:
+## Tools
 
 | Tool | Description | Requires |
 |------|-------------|----------|
 | `web_search` | Search the web via Tavily | `TAVILY_API_KEY` |
 | `wikipedia_lookup` | Get Wikipedia article summaries | - |
 | `calculator` | Safe math evaluation | - |
-| `read_file` | Read file contents | - |
 
 ## Model Abstraction
 
@@ -187,19 +163,20 @@ Each eval run returns:
 ```python
 {
     "text": str,              # Final response text
-    "iterations": int,        # Number of loop iterations
+    "iterations": list,       # Iteration details for tracing
+    "iteration_count": int,   # Number of loop iterations
     "tool_calls_total": int,  # Total tool calls made
     "total_tokens": int,      # Total tokens used
-    "false_finishes": int,    # False finishes detected (C only)
-    "narrate_then_act": int,  # Narrate-then-act events (C only)
+    "false_finishes": int,    # False finishes detected (adaptive only)
+    "narrate_then_act": int,  # Narrate-then-act events (adaptive only)
     "task_complete": bool,    # Did model complete the task?
     "finished_reason": str,   # Why the loop ended
 }
 ```
 
-## Adaptive Finish Details (Harness C)
+## Adaptive Finish Details
 
-Harness C uses two detection mechanisms:
+The adaptive harness uses two detection mechanisms:
 
 ### 1. Narrate-then-act detection
 Catches phrases like:
@@ -215,7 +192,7 @@ When detected without tool calls, sends escalating nudges:
 ### 2. Completion signal detection
 Recognizes legitimate completion:
 - "Final Answer:"
-- Checkmarks (✅)
+- Checkmarks (checkmark emoji)
 - "The answer is..."
 - "In conclusion..."
 

@@ -25,18 +25,18 @@ from rich.panel import Panel
 # Initialize tracing BEFORE importing harnesses (which import models)
 from instrumentation import init_tracing, shutdown_tracing
 
-import harness_a
-import harness_b
-import harness_c
+import harness_implicit
+import harness_explicit
+import harness_adaptive
 from models import EVAL_MODELS, Provider
 
 console = Console()
 
 # Available harnesses
 HARNESSES = {
-    "a": ("implicit", harness_a),
-    "b": ("explicit", harness_b),
-    "c": ("adaptive", harness_c),
+    "implicit": ("implicit", harness_implicit),
+    "explicit": ("explicit", harness_explicit),
+    "adaptive": ("adaptive", harness_adaptive),
 }
 
 # Available providers/models for eval matrix

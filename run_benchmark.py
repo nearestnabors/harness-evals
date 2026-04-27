@@ -1,18 +1,15 @@
 """
-Run GAIA benchmark tasks across harnesses.
+Run multi-step benchmark tasks across harnesses.
 
 Usage:
-    # Run with sample tasks (no HuggingFace access needed)
-    python run_gaia.py --sample
-
-    # Run with real GAIA tasks (requires HF_TOKEN)
-    python run_gaia.py --level 1 --max-tasks 5
+    # Run sample tasks
+    python run_benchmark.py --sample
 
     # Run specific harness only
-    python run_gaia.py --sample --harness A
+    python run_benchmark.py --sample --harness implicit
 
-    # Run with specific provider
-    python run_gaia.py --sample --provider openai
+    # Run with both providers
+    python run_benchmark.py --sample --provider both
 """
 
 import argparse
@@ -27,23 +24,20 @@ from rich.panel import Panel
 from rich.rule import Rule
 
 from instrumentation import init_tracing, shutdown_tracing
-from gaia_loader import (
-    GAIATask,
-    load_gaia_tasks,
+from eval_tasks import (
+    EvalTask,
     get_sample_tasks,
     format_task_prompt,
     check_answer,
 )
-from tools_gaia import tools_list as gaia_tools_list
-from tools_gaia import tool_functions as gaia_tool_functions
-from tools_gaia import reset_tasks as gaia_reset_tasks
+from tools import tools_list, tool_functions, reset_tasks
 from models import EVAL_MODELS
 
 console = Console()
 
 
-# System prompt for GAIA tasks
-GAIA_SYSTEM_PROMPT = """You are a helpful assistant that can search the web, look up information on Wikipedia, read files, and perform calculations to answer questions accurately.
+# System prompt for benchmark tasks
+SYSTEM_PROMPT = """You are a helpful assistant that can search the web, look up information on Wikipedia, and perform calculations to answer questions accurately.
 
 Use the available tools as needed to find information and solve problems step by step.
 When you have found the answer, clearly state your final answer.
@@ -51,13 +45,12 @@ When you have found the answer, clearly state your final answer.
 Available tools:
 - web_search: Search the web for current information
 - wikipedia_lookup: Look up facts on Wikipedia
-- calculator: Perform mathematical calculations
-- read_file: Read content from attached files"""
+- calculator: Perform mathematical calculations"""
 
 
 @dataclass
 class TaskResult:
-    """Result of running a single GAIA task."""
+    """Result of running a single benchmark task."""
 
     task_id: str
     level: int
@@ -78,38 +71,39 @@ class TaskResult:
 
 
 def run_task_with_harness(
-    task: GAIATask,
+    task: EvalTask,
     harness: str,
     provider: str,
     model: str,
 ) -> TaskResult:
-    """Run a single GAIA task with a specific harness."""
+    """Run a single benchmark task with a specific harness."""
 
     prompt = format_task_prompt(task, include_instructions=False)
 
     # Import the appropriate harness
-    if harness == "A":
-        from harness_a import run as run_harness
-    elif harness == "B":
-        from harness_b import run as run_harness
-    elif harness == "C":
-        from harness_c import run as run_harness
+    if harness == "implicit":
+        from harness_implicit import run as run_harness
+    elif harness == "explicit":
+        from harness_explicit import run as run_harness
+    elif harness == "adaptive":
+        from harness_adaptive import run as run_harness
     else:
         raise ValueError(f"Unknown harness: {harness}")
 
     try:
-        # Reset GAIA tools state
-        gaia_reset_tasks()
+        # Reset tools state
+        reset_tasks()
 
-        # Run the harness with GAIA tools
+        # Run the harness
         result = run_harness(
             prompt=prompt,
             provider=provider,
             model=model,
-            system_prompt=GAIA_SYSTEM_PROMPT,
-            max_iterations=15,  # GAIA tasks may need more iterations
-            tools_list=gaia_tools_list,
-            tool_functions=gaia_tool_functions,
+            system_prompt=SYSTEM_PROMPT,
+            max_iterations=15,
+            tools_list=tools_list,
+            tool_functions=tool_functions,
+            verbose=True,
         )
 
         # Check if answer is correct
@@ -126,7 +120,7 @@ def run_task_with_harness(
             model=model,
             task_complete=result.get("task_complete", False),
             answer_correct=answer_correct,
-            iterations=result.get("iterations", 0),
+            iterations=result.get("iteration_count", 0),
             tool_calls=result.get("tool_calls_total", 0),
             false_finishes=result.get("false_finishes", 0),
             narrate_then_act=result.get("narrate_then_act", 0),
@@ -161,7 +155,7 @@ def run_task_with_harness(
 def print_results_table(results: list[TaskResult]) -> None:
     """Print a summary table of results."""
 
-    table = Table(title="GAIA Benchmark Results", show_lines=True)
+    table = Table(title="Benchmark Results", show_lines=True)
 
     table.add_column("Task", style="cyan", width=12)
     table.add_column("Level", justify="center", width=5)
@@ -255,31 +249,19 @@ def print_summary(results: list[TaskResult]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run GAIA benchmark tasks")
+    parser = argparse.ArgumentParser(description="Run multi-step benchmark tasks")
 
     # Task selection
     parser.add_argument(
-        "--sample",
-        action="store_true",
-        help="Use sample tasks instead of real GAIA (no HF access needed)",
-    )
-    parser.add_argument(
-        "--level",
-        type=int,
-        choices=[1, 2, 3],
-        help="GAIA difficulty level (1=easy, 2=medium, 3=hard)",
-    )
-    parser.add_argument(
         "--max-tasks",
         type=int,
-        default=5,
-        help="Maximum number of tasks to run (default: 5)",
+        help="Maximum number of tasks to run (default: all)",
     )
 
     # Harness selection
     parser.add_argument(
         "--harness",
-        choices=["A", "B", "C", "all"],
+        choices=["implicit", "explicit", "adaptive", "all"],
         default="all",
         help="Which harness to run (default: all)",
     )
@@ -305,30 +287,16 @@ def main():
     init_tracing()
 
     # Load tasks
-    console.print(Rule("[bold]Loading GAIA Tasks[/bold]"))
-
-    if args.sample:
-        tasks = get_sample_tasks()
-        console.print(f"Loaded {len(tasks)} sample GAIA-style tasks")
-    else:
-        try:
-            tasks = load_gaia_tasks(
-                level=args.level,
-                max_tasks=args.max_tasks,
-                shuffle=True,
-            )
-            console.print(f"Loaded {len(tasks)} GAIA tasks from HuggingFace")
-        except ValueError as e:
-            console.print(f"[red]Error loading GAIA tasks:[/red] {e}")
-            console.print("[yellow]Tip: Use --sample to run with sample tasks instead[/yellow]")
-            return
+    console.print(Rule("[bold]Loading Evaluation Tasks[/bold]"))
+    tasks = get_sample_tasks()
+    console.print(f"Loaded {len(tasks)} multi-step evaluation tasks")
 
     if args.max_tasks and len(tasks) > args.max_tasks:
         tasks = tasks[: args.max_tasks]
 
     # Determine harnesses to run
     if args.harness == "all":
-        harnesses = ["A", "B", "C"]
+        harnesses = ["implicit", "explicit", "adaptive"]
     else:
         harnesses = [args.harness]
 

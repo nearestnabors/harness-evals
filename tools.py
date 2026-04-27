@@ -1,266 +1,321 @@
 """
-Shared tool definitions for the finish-condition eval harnesses.
-Extracted from Jose's agent-poc.
+Real tools for GAIA benchmark tasks.
+
+These tools actually call APIs and perform real operations:
+- web_search: Search the web using Tavily API
+- calculator: Evaluate mathematical expressions
+- read_file: Read content from files (for GAIA attachments)
+- wikipedia_lookup: Get Wikipedia article summaries
 """
 
+import json
+import math
+import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any
 
-import pandas as pd
-
-# -----------------------------
-# Module-level TODO List Store
-# -----------------------------
-# Keeps tasks in-memory across tool calls within the same process.
-# Each task is a dict with keys: id, description, deliverable, data, status
-TASKS: List[Dict[str, str]] = []
-
-
-def _generate_next_task_id() -> str:
-    """Generate the next numeric id as a string based on existing ids."""
-    max_id_numeric = 0
-    for task in TASKS:
-        task_id = task.get("id", "").strip()
-        try:
-            max_id_numeric = max(max_id_numeric, int(task_id))
-        except ValueError:
-            continue
-    return str(max_id_numeric + 1)
-
-
-def reset_tasks():
-    """Clear all tasks. Useful for resetting state between eval runs."""
-    global TASKS
-    TASKS = []
-
-
-def todo_write(
-    description: str,
-    deliverable: str,
-    id: Optional[str] = None,
-    data: Optional[str] = None,
-    status: Optional[str] = None,
-):
-    """
-    Write (append or update) a task in the in-memory task list.
-
-    - If `id` is omitted, a new numeric id is generated and the task is appended.
-    - If `id` is provided and exists, the task is updated in place.
-
-    Returns the created/updated task.
-    """
-    if not description or not deliverable:
-        return {"error": "Both 'description' and 'deliverable' are required"}
-
-    task_id = (id or _generate_next_task_id()).strip()
-
-    # Try update if id exists
-    for task in TASKS:
-        if task.get("id") == task_id:
-            task["description"] = description
-            task["deliverable"] = deliverable
-            if data is not None:
-                task["data"] = data
-            if status is not None:
-                task["status"] = status
-            return task
-
-    # Append new task
-    new_task: Dict[str, str] = {
-        "id": task_id,
-        "description": description,
-        "deliverable": deliverable,
-        "data": data if data is not None else "N/A",
-        "status": status if status is not None else "pending",
-    }
-    TASKS.append(new_task)
-    return new_task
-
-
-def todo_read():
-    """Return the current list of tasks (list of dicts)."""
-    return TASKS
-
-
-def calculator(expression):
-    """Evaluate a mathematical expression."""
-    # Remove any non-digit or non-operator characters from the expression
-    expression = re.sub(r"[^0-9+\-*/().]", "", expression)
-
-    try:
-        result = eval(expression)
-        return str(result)
-    except (SyntaxError, ZeroDivisionError, NameError, TypeError, OverflowError):
-        return "Error: Invalid expression"
-
-
-# Path to sample trace data (relative to this file)
-TRACE_CSV_PATH = Path(__file__).resolve().parent / "sample_trace.csv"
-
-
-def get_trace_preview():
-    """Get a preview of a complete trace. All fields truncated to 30 chars."""
-    df = pd.read_csv(TRACE_CSV_PATH)
-    df = df.set_index("id")
-    df.drop(
-        columns=["attributes.input.value", "attributes.output.value"],
-        inplace=True,
-        errors="ignore",
-    )
-    df = df.apply(
-        lambda col: col.map(lambda val: val[:30] if isinstance(val, str) else val)
-    )
-    df.dropna(inplace=True, axis=1)
-    return df.to_dict(orient="records")
-
-
-def get_span_data(ids: list[str]):
-    """Get all data for a single or list of spans by their IDs."""
-    df = pd.read_csv(TRACE_CSV_PATH)
-    df = df.set_index("id")
-    df = df.loc[ids]
-    return df.to_dict(orient="records")
-
-
-def find_in_trace(query: str, max_results: int = 20):
-    """
-    Perform a free-text search over the entire trace (all columns).
-    Mimics a spreadsheet "Ctrl+F" style search.
-
-    Args:
-        query: Search query string. Space-separated terms are OR'd.
-        max_results: Maximum number of matches to return.
-
-    Returns:
-        List of dicts with keys: id, column, content
-    """
-    df = pd.read_csv(TRACE_CSV_PATH)
-
-    terms = [re.escape(term) for term in query.split() if term.strip()]
-    if not terms:
-        return []
-    pattern = re.compile("|".join(terms), re.IGNORECASE)
-
-    matches: list[dict] = []
-
-    for row_idx, row in df.iterrows():
-        row_id = row.get("id", row_idx)
-        for col, value in row.items():
-            if pd.isna(value):
-                continue
-            value_str = str(value)
-            if pattern.search(value_str):
-                matches.append(
-                    {
-                        "id": row_id,
-                        "column": col,
-                        "content": value_str,
-                    }
-                )
-            if len(matches) >= max_results:
-                return matches
-
-    return matches
-
-
-# -----------------------------
-# Tool Definitions (schemas)
-# -----------------------------
-
+# Tool definitions for the LLM (Anthropic/OpenAI format)
 tools_list = [
     {
-        "name": "calculator",
-        "description": "A simple calculator that performs basic arithmetic operations.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "expression": {
-                    "type": "string",
-                    "description": "The mathematical expression to evaluate (e.g., '2 + 3 * 4').",
-                }
-            },
-            "required": ["expression"],
-        },
-    },
-    {
-        "name": "get_trace_preview",
-        "description": "Get a preview of a complete trace. All the fields are truncated to 50 chars.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "get_span_data",
-        "description": "Get the all the data for a single or a list of spans. The ids are the span ids from the trace.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ids": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["ids"],
-        },
-    },
-    {
-        "name": "find_in_trace",
-        "description": "Search the trace for a query string and return matching cells.",
+        "name": "web_search",
+        "description": "Search the web for information. Returns relevant snippets from web pages. Use this for current events, facts, or any information you need to look up.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query. Multiple terms can be separated by spaces (OR logic).",
+                    "description": "The search query",
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "Maximum number of results to return.",
-                    "default": 20,
+                    "description": "Maximum number of results to return (default: 5)",
+                    "default": 5,
                 },
             },
             "required": ["query"],
         },
     },
     {
-        "name": "todo_write",
-        "description": "Append or update a task in the in-memory task list (list of dicts). If id is omitted, a new numeric id is generated.",
+        "name": "calculator",
+        "description": "Evaluate a mathematical expression. Supports basic arithmetic (+, -, *, /, **), parentheses, and common math functions (sqrt, sin, cos, tan, log, exp, abs, round, floor, ceil). Use this for any calculations.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "id": {"type": "string", "description": "Optional explicit task id."},
-                "description": {"type": "string", "description": "Task description."},
-                "deliverable": {
+                "expression": {
                     "type": "string",
-                    "description": "Expected deliverable of the task.",
-                },
-                "data": {
-                    "type": "string",
-                    "description": "Optional data payload for the task.",
-                },
-                "status": {
-                    "type": "string",
-                    "description": "Task status (default: 'pending').",
+                    "description": "The mathematical expression to evaluate (e.g., '(42 * 1905) + sqrt(144)')",
                 },
             },
-            "required": ["description", "deliverable"],
+            "required": ["expression"],
         },
     },
     {
-        "name": "todo_read",
-        "description": "Read the current list of tasks (list of dicts).",
+        "name": "read_file",
+        "description": "Read the contents of a file. Use this to read attached documents, CSVs, or text files provided with the task.",
         "input_schema": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the file to read",
+                },
+            },
+            "required": ["file_path"],
+        },
+    },
+    {
+        "name": "wikipedia_lookup",
+        "description": "Look up a Wikipedia article and get a summary. Use this for factual information about people, places, events, concepts, etc.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "description": "The topic to look up on Wikipedia",
+                },
+            },
+            "required": ["topic"],
         },
     },
 ]
 
-# Map tool names to functions for dynamic invocation
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tool implementations
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def web_search(query: str, max_results: int = 5) -> str:
+    """
+    Search the web using Tavily API.
+
+    Requires TAVILY_API_KEY environment variable.
+    Get a free API key at https://tavily.com
+    """
+    api_key = os.environ.get("TAVILY_API_KEY")
+    if not api_key:
+        return "Error: TAVILY_API_KEY environment variable not set. Get a free key at https://tavily.com"
+
+    try:
+        from tavily import TavilyClient
+
+        client = TavilyClient(api_key=api_key)
+        response = client.search(
+            query=query,
+            max_results=max_results,
+            include_answer=True,
+            include_raw_content=False,
+        )
+
+        # Format results
+        results = []
+
+        # Include the AI-generated answer if available
+        if response.get("answer"):
+            results.append(f"**Summary:** {response['answer']}\n")
+
+        # Include search results
+        for i, result in enumerate(response.get("results", [])[:max_results], 1):
+            title = result.get("title", "No title")
+            url = result.get("url", "")
+            content = result.get("content", "No content")
+            results.append(f"{i}. **{title}**\n   URL: {url}\n   {content}\n")
+
+        if not results:
+            return "No results found for this query."
+
+        return "\n".join(results)
+
+    except Exception as e:
+        return f"Error performing web search: {e}"
+
+
+def calculator(expression: str) -> str:
+    """
+    Safely evaluate a mathematical expression.
+
+    Supports: +, -, *, /, **, (), and math functions.
+    """
+    # Define allowed names for safe evaluation
+    allowed_names = {
+        # Math constants
+        "pi": math.pi,
+        "e": math.e,
+        "tau": math.tau,
+        "inf": math.inf,
+        # Math functions
+        "abs": abs,
+        "round": round,
+        "min": min,
+        "max": max,
+        "sum": sum,
+        "pow": pow,
+        # From math module
+        "sqrt": math.sqrt,
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "asin": math.asin,
+        "acos": math.acos,
+        "atan": math.atan,
+        "sinh": math.sinh,
+        "cosh": math.cosh,
+        "tanh": math.tanh,
+        "log": math.log,
+        "log10": math.log10,
+        "log2": math.log2,
+        "exp": math.exp,
+        "floor": math.floor,
+        "ceil": math.ceil,
+        "factorial": math.factorial,
+        "gcd": math.gcd,
+        "degrees": math.degrees,
+        "radians": math.radians,
+    }
+
+    try:
+        # Remove any potentially dangerous characters
+        # Allow: digits, operators, parentheses, dots, commas, spaces, function names
+        sanitized = expression.strip()
+
+        # Check for obviously dangerous patterns
+        dangerous_patterns = [
+            r"__",  # Dunder methods
+            r"import",
+            r"exec",
+            r"eval",
+            r"open",
+            r"file",
+            r"input",
+            r"print",
+            r"\[",  # List indexing (could access __builtins__)
+            r"\]",
+        ]
+
+        for pattern in dangerous_patterns:
+            if re.search(pattern, sanitized, re.IGNORECASE):
+                return f"Error: Expression contains disallowed pattern: {pattern}"
+
+        # Evaluate with restricted namespace
+        result = eval(sanitized, {"__builtins__": {}}, allowed_names)
+
+        # Format result nicely
+        if isinstance(result, float):
+            # Avoid scientific notation for reasonable numbers
+            if abs(result) < 1e10 and abs(result) > 1e-10 or result == 0:
+                # Round to avoid floating point artifacts
+                if result == int(result):
+                    return str(int(result))
+                return str(round(result, 10))
+            else:
+                return str(result)
+
+        return str(result)
+
+    except ZeroDivisionError:
+        return "Error: Division by zero"
+    except ValueError as e:
+        return f"Error: Invalid value - {e}"
+    except SyntaxError as e:
+        return f"Error: Invalid syntax - {e}"
+    except Exception as e:
+        return f"Error evaluating expression: {e}"
+
+
+def read_file(file_path: str) -> str:
+    """
+    Read content from a file.
+
+    Supports: .txt, .csv, .json, .md, .py, and other text files.
+    For binary files like PDFs, returns an error suggesting web search.
+    """
+    try:
+        path = Path(file_path)
+
+        if not path.exists():
+            return f"Error: File not found: {file_path}"
+
+        # Check file extension
+        suffix = path.suffix.lower()
+
+        # Binary files we can't read directly
+        binary_extensions = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip", ".tar", ".gz", ".png", ".jpg", ".jpeg", ".gif", ".mp3", ".mp4"}
+
+        if suffix in binary_extensions:
+            return f"Error: Cannot read binary file ({suffix}). Try searching for the content online or describe what you need from this file."
+
+        # Read text files
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+
+        # Truncate if very long
+        max_chars = 50000
+        if len(content) > max_chars:
+            content = content[:max_chars] + f"\n\n... [truncated, {len(content) - max_chars} more characters]"
+
+        return content
+
+    except PermissionError:
+        return f"Error: Permission denied reading file: {file_path}"
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+
+def wikipedia_lookup(topic: str) -> str:
+    """
+    Look up a topic on Wikipedia using the API.
+
+    Returns the article summary/extract.
+    """
+    import urllib.request
+    import urllib.parse
+
+    try:
+        # Use Wikipedia API to get article summary
+        base_url = "https://en.wikipedia.org/api/rest_v1/page/summary/"
+        encoded_topic = urllib.parse.quote(topic.replace(" ", "_"))
+        url = base_url + encoded_topic
+
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "HarnessEvals/1.0 (research project)"}
+        )
+
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+
+        title = data.get("title", topic)
+        extract = data.get("extract", "No summary available.")
+        page_url = data.get("content_urls", {}).get("desktop", {}).get("page", "")
+
+        result = f"**{title}**\n\n{extract}"
+        if page_url:
+            result += f"\n\nSource: {page_url}"
+
+        return result
+
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return f"No Wikipedia article found for '{topic}'. Try a different search term or use web_search."
+        return f"Error looking up Wikipedia: HTTP {e.code}"
+    except Exception as e:
+        return f"Error looking up Wikipedia: {e}"
+
+
+# Map tool names to functions
 tool_functions = {
+    "web_search": web_search,
     "calculator": calculator,
-    "get_trace_preview": get_trace_preview,
-    "get_span_data": get_span_data,
-    "find_in_trace": find_in_trace,
-    "todo_write": todo_write,
-    "todo_read": todo_read,
+    "read_file": read_file,
+    "wikipedia_lookup": wikipedia_lookup,
 }
+
+
+def reset_tasks():
+    """Reset function for compatibility with harnesses. No-op for GAIA tools."""
+    pass
+
+
+# For compatibility with existing harnesses
+TASKS = []
