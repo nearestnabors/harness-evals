@@ -63,27 +63,20 @@ def get_sample_tasks() -> list[EvalTask]:
             expected_answer="5210",  # Washington 1732 + Adams 1735 + Jefferson 1743
             metadata={"tools_needed": ["web_search", "calculator"]},
         ),
-        # Tasks designed to trigger "narrate-then-act" false finishes
+        # Multi-step planning tasks (open-ended research + calculation)
         EvalTask(
             task_id="planning_1",
-            question="I need you to think through this carefully. First, consider what information you'll need, then outline your approach, and finally execute it: What is the current population of the capital city of the country that hosted the 2024 Summer Olympics, divided by 1000?",
+            question="""Find who invented the telephone and when, who invented the light bulb and when, calculate how many years apart these inventions were, and present a comparison.""",
             level=2,
-            expected_answer="2102",  # Paris ~2.1M, /1000 = ~2102
-            metadata={"tools_needed": ["web_search", "calculator"], "tests_false_finish": True},
+            expected_answer=None,
+            metadata={"tools_needed": ["web_search", "calculator"]},
         ),
         EvalTask(
             task_id="planning_2",
-            question="Let me explain what I need: I want to know the atomic number of gold. I think it's around 79, but please verify this and then multiply it by 3. Walk me through your reasoning first.",
-            level=1,
-            expected_answer="237",  # Gold = 79, 79 * 3 = 237
-            metadata={"tools_needed": ["web_search", "calculator"], "tests_false_finish": True},
-        ),
-        EvalTask(
-            task_id="planning_3",
-            question="Before you answer, plan out the steps you'll take. Then: Find the year the Eiffel Tower was completed, subtract 1000, and tell me what happened that year in European history.",
+            question="""Find the height of Mount Everest and K2 in meters, calculate the difference, find who first climbed each mountain and when, and present the comparison.""",
             level=2,
-            expected_answer="889",  # Eiffel Tower 1889 - 1000 = 889
-            metadata={"tools_needed": ["web_search", "calculator"], "tests_false_finish": True},
+            expected_answer=None,
+            metadata={"tools_needed": ["web_search", "calculator"]},
         ),
     ]
 

@@ -36,14 +36,24 @@ from tools import reset_tasks as default_reset_tasks
 
 console = Console()
 
-# Default system prompt
-SYSTEM_PROMPT = """You are an agent that helps analyze AI system traces and spans.
-You have access to tools to search and analyze trace data.
-Be conversational and explain what you're doing as you work.
-When you have completed the user's request, provide your final answer."""
+# Default system prompt (Jose-style: encourages acknowledgement + planning)
+SYSTEM_PROMPT = """You are a helpful assistant with access to tools.
+You are a polite, conversational agent.
+- ALWAYS start with a short acknowledgement to the user
+- THEN, if a tool is needed, include the tool call
+- Keep the user informed of what you're doing
 
-# Default test prompt
-DEFAULT_PROMPT = "Can you find all the span ids that contain the word 'Aragorn', sort them by latency, multiply the latency by 314 and show the result in Markdown."
+IMPORTANT: Plan and track your tasks throughout the conversation.
+1. First acknowledge the request
+2. Create a plan for what you need to do
+3. Execute each step one at a time
+4. Report results as you go
+
+It is critical that you complete each step before moving to the next.
+Respond politely and conversationally, starting with a brief acknowledgement."""
+
+# Default test prompt (multi-step task that can trigger false finishes)
+DEFAULT_PROMPT = "Can you find the populations of Tokyo, Osaka, and Yokohama, sort them by size, multiply each by 314, and show me the results in a Markdown table?"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

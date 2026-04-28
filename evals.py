@@ -332,7 +332,7 @@ def main():
     )
     parser.add_argument(
         "--prompt", "-P",
-        default="What is the population of Tokyo? Multiply it by 7.",
+        default="Can you find the populations of Tokyo, Osaka, and Yokohama, sort them by size, multiply each by 314, and show me the results in a Markdown table?",
         help="Prompt to test",
     )
     parser.add_argument(
