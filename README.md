@@ -18,17 +18,44 @@ harness-evals/
 └── README.md
 ```
 
+## What is a False Finish?
+
+A **false finish** is when the model signals it's done (stops calling tools) but hasn't actually completed the task. The classic pattern is **narrate-then-act without acting**:
+
+```
+User: Find Tokyo's population and multiply by 2.
+
+Model: "I'll search for Tokyo's population now."
+       [NO TOOL CALL - just stops here]
+```
+
+The model *says* it will do something but doesn't actually call the tool.
+
 ## Harness Descriptions
 
 ### Implicit Finish (`harness_implicit.py`)
 **Finish condition:** Model stops calling tools.
 
-The simplest approach — the model decides when it's done by simply not requesting any more tool calls. Cheap and effective, but can't catch premature exits.
+The simplest approach — the model decides when it's done by simply not requesting any more tool calls. Cheap and effective, but can't catch premature exits (false finishes).
 
 ### Explicit Finish (`harness_explicit.py`)
 **Finish condition:** Model must call `finish()` tool.
 
-Forces the model to explicitly signal completion. Adds ~5% token overhead but provides clear intent.
+Adds a `finish()` tool that the model must call to signal completion:
+
+```
+Model: "Here's the answer: 28 million."
+       [calls finish(summary="Calculated Tokyo population * 2")]
+```
+
+**Pros:**
+- Clear intent — no ambiguity about whether the model thinks it's finished
+- Can include a summary of what was accomplished
+
+**Cons:**
+- ~5% token overhead (extra tool call)
+- Model might forget to call it (then you need a nudge anyway)
+- Doesn't solve the core problem — model can still call `finish()` prematurely
 
 ### Adaptive Finish (`harness_adaptive.py`)
 **Finish condition:** Smart detection of genuine completion vs. false finishes.
