@@ -1,6 +1,29 @@
 # Finish Condition Eval Harnesses
 
-Evaluates different agent loop finish conditions across model providers.
+A benchmark suite for evaluating how different agent loop finish conditions affect task completion across LLM providers.
+
+## Why This Exists
+
+When building agentic applications, you need to decide how the agent loop knows when to stop. The simplest approach—"stop when the model doesn't call any tools"—has a subtle failure mode: **the model says it will do something, then stops without doing it.**
+
+```
+User: Find Tokyo's population and multiply by 2.
+
+Model: "I'll search for Tokyo's population now."
+       [NO TOOL CALL - just stops here]
+```
+
+This is a **false finish**—the model signals completion but hasn't actually completed the task. This suite lets you test different finish conditions to see which ones catch this pattern for your models.
+
+## Built With
+
+| Tool | Purpose |
+|------|---------|
+| [Phoenix](https://github.com/Arize-ai/phoenix) | Tracing and eval analysis—every harness run is traced with custom attributes for debugging |
+| [Tavily](https://tavily.com) | Web search tool for agents |
+| [OpenInference](https://github.com/Arize-ai/openinference) | Auto-instrumentation for Anthropic and OpenAI calls |
+
+All harness runs are automatically traced to a local Phoenix server, letting you inspect each iteration, tool call, and false finish detection in detail.
 
 ## Structure
 
@@ -17,19 +40,6 @@ harness-evals/
 ├── instrumentation.py    # Phoenix tracing setup
 └── README.md
 ```
-
-## What is a False Finish?
-
-A **false finish** is when the model signals it's done (stops calling tools) but hasn't actually completed the task. The classic pattern is **narrate-then-act without acting**:
-
-```
-User: Find Tokyo's population and multiply by 2.
-
-Model: "I'll search for Tokyo's population now."
-       [NO TOOL CALL - just stops here]
-```
-
-The model *says* it will do something but doesn't actually call the tool.
 
 ## Harness Descriptions
 
