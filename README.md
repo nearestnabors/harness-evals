@@ -133,8 +133,10 @@ python run_benchmark.py --category lookup_calc
 To quickly test whether a model exhibits the narrate-then-act pattern:
 
 ```bash
-# Run summary_finale tasks with all harnesses (recommended)
+# Run summary_finale tasks with all harnesses
 python run_benchmark.py --narrate-test --provider anthropic
+python run_benchmark.py --narrate-test --provider openai
+python run_benchmark.py --narrate-test --provider openrouter  # Gemma 4
 
 # Compare implicit vs adaptive to see if adaptive catches false finishes
 python run_benchmark.py --narrate-test --harness implicit --provider openai
@@ -142,6 +144,23 @@ python run_benchmark.py --narrate-test --harness adaptive --provider openai
 ```
 
 The `--narrate-test` flag runs only the `summary_finale` tasks, which are specifically designed to expose models that announce intent ("I'll write a summary...") without following through.
+
+### Supported Providers
+
+| Provider | Model | Flag |
+|----------|-------|------|
+| Anthropic | Claude Sonnet 4 | `--provider anthropic` |
+| OpenAI | GPT-4o | `--provider openai` |
+| OpenRouter | Gemma 4 31B | `--provider openrouter` |
+
+Run all providers at once:
+```bash
+# All three providers
+python run_benchmark.py --provider all
+
+# Just frontier models (Anthropic + OpenAI)
+python run_benchmark.py --provider frontier
+```
 
 ### Run Individual Harness
 
