@@ -224,3 +224,23 @@ Recognizes legitimate completion:
 - "In conclusion..."
 
 When completion signals are present, narrate-then-act patterns are ignored (prevents false positives).
+
+## Future Enhancement: Task Management Integration
+
+The adaptive harness becomes even more effective when combined with a **task management tool**. Instead of relying on pattern matching to detect false finishes, you can verify actual task completion state.
+
+### How It Would Work
+
+1. Add a `todo` tool that lets the model create and complete tasks
+2. When the model stops calling tools, check if any tasks are still incomplete
+3. If incomplete tasks exist, nudge with specifics: "Task 3 (Calculate average) is still pending"
+4. Fall back to pattern matching if the model doesn't use the task tool
+
+### Benefits
+
+- **Concrete verification** instead of pattern guessing
+- **Specific nudges** ("Task 3 still pending") vs generic ("Continue with your plan")
+- **Graceful fallback** to current behavior if model doesn't use task tool
+- **Works with any model** that supports tool calling
+
+This is particularly effective for multi-step tasks where the prompt contains a numbered list of steps. The harness could even pre-populate tasks from the prompt and require the model to mark each one complete.
