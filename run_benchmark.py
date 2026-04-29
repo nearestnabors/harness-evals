@@ -279,9 +279,9 @@ def main():
     # Provider selection
     parser.add_argument(
         "--provider",
-        choices=["anthropic", "openai", "both"],
+        choices=["anthropic", "openai", "openrouter", "all", "frontier"],
         default="anthropic",
-        help="Which provider to use (default: anthropic)",
+        help="Which provider to use: anthropic, openai, openrouter, frontier (anthropic+openai), or all (default: anthropic)",
     )
 
     # Output
@@ -311,7 +311,9 @@ def main():
         harnesses = [args.harness]
 
     # Determine providers to run
-    if args.provider == "both":
+    if args.provider == "all":
+        providers = ["anthropic", "openai", "openrouter"]
+    elif args.provider == "frontier":
         providers = ["anthropic", "openai"]
     else:
         providers = [args.provider]
@@ -379,8 +381,6 @@ def main():
         output_data = {
             "timestamp": datetime.now().isoformat(),
             "config": {
-                "sample": args.sample,
-                "level": args.level,
                 "max_tasks": args.max_tasks,
                 "harnesses": harnesses,
                 "providers": providers,

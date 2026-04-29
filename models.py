@@ -45,7 +45,7 @@ class ModelResponse:
     raw_response: Any = None  # Original response for debugging
 
 
-Provider = Literal["anthropic", "openai"]
+Provider = Literal["anthropic", "openai", "openrouter"]
 
 
 def get_client(provider: Provider):
@@ -58,6 +58,13 @@ def get_client(provider: Provider):
         from openai import OpenAI
 
         return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    elif provider == "openrouter":
+        from openai import OpenAI
+
+        return OpenAI(
+            api_key=os.environ.get("OPENROUTER_API_KEY"),
+            base_url="https://openrouter.ai/api/v1"
+        )
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
@@ -202,8 +209,8 @@ def call_model(
         response = client.messages.create(**kwargs)
         return _parse_anthropic_response(response)
 
-    elif provider == "openai":
-        # OpenAI uses system message in the messages list
+    elif provider in ("openai", "openrouter"):
+        # OpenAI and OpenRouter use same API format
         openai_messages = []
         if system_prompt:
             openai_messages.append({"role": "system", "content": system_prompt})
@@ -211,10 +218,14 @@ def call_model(
 
         kwargs = {
             "model": model,
-            "max_completion_tokens": max_tokens,
             "temperature": temperature,
             "messages": openai_messages,
         }
+        # OpenRouter uses max_tokens, OpenAI uses max_completion_tokens
+        if provider == "openrouter":
+            kwargs["max_tokens"] = max_tokens
+        else:
+            kwargs["max_completion_tokens"] = max_tokens
         if tools:
             kwargs["tools"] = _convert_tools_for_openai(tools)
 
@@ -243,7 +254,7 @@ def format_tool_result_message(
                 }
             ],
         }
-    elif provider == "openai":
+    elif provider in ("openai", "openrouter"):
         return {
             "role": "tool",
             "tool_call_id": tool_call_id,
@@ -259,8 +270,8 @@ def format_assistant_message(provider: Provider, response: ModelResponse) -> dic
     if provider == "anthropic":
         # Anthropic expects the raw content blocks
         return {"role": "assistant", "content": response.raw_response.content}
-    elif provider == "openai":
-        # OpenAI expects the message object
+    elif provider in ("openai", "openrouter"):
+        # OpenAI/OpenRouter expects the message object
         return response.raw_response.choices[0].message.model_dump()
     else:
         raise ValueError(f"Unknown provider: {provider}")
@@ -270,10 +281,12 @@ def format_assistant_message(provider: Provider, response: ModelResponse) -> dic
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
     "openai": "gpt-4o",
+    "openrouter": "google/gemma-4-31b-it",  # Paid tier (free tier has upstream limits)
 }
 
 # Models to use in eval matrix
 EVAL_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
     "openai": "gpt-4o",
+    "openrouter": "google/gemma-4-31b-it",  # Paid tier (free tier has upstream limits)
 }

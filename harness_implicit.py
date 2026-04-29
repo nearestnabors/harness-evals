@@ -223,7 +223,7 @@ def main():
     )
     parser.add_argument(
         "--provider", "-p",
-        choices=["anthropic", "openai"],
+        choices=["anthropic", "openai", "openrouter"],
         default="anthropic",
         help="Model provider (default: anthropic)",
     )

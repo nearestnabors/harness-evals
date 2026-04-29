@@ -39,6 +39,22 @@ _initialized = False
 HarnessType = Literal["implicit", "explicit", "adaptive"]
 
 
+def _is_phoenix_running(endpoint: str = "http://localhost:6006") -> bool:
+    """Check if Phoenix server is running."""
+    import socket
+    try:
+        # Parse host and port from endpoint
+        host = "localhost"
+        port = 6006
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
 def init_tracing(project_name: str = "harness-evals") -> bool:
     """
     Initialize local Phoenix tracing.
@@ -58,6 +74,12 @@ def init_tracing(project_name: str = "harness-evals") -> bool:
 
     if _initialized:
         return True
+
+    # Check if Phoenix is running first
+    if not _is_phoenix_running():
+        print("[instrumentation] Phoenix not running at localhost:6006 - tracing disabled")
+        _initialized = True  # Mark as initialized to prevent retry
+        return False
 
     try:
         from phoenix.otel import register
@@ -86,6 +108,7 @@ def init_tracing(project_name: str = "harness-evals") -> bool:
 
     except Exception as e:
         print(f"[instrumentation] ERROR initializing tracing: {e}")
+        _initialized = True  # Mark as initialized to prevent retry
         return False
 
 

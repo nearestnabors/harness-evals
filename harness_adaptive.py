@@ -105,6 +105,13 @@ def _detect_narrate_then_act(text: str) -> tuple[bool, list[str]]:
     """
     Detect if the text contains narrate-then-act signals.
     Returns (detected, matched_phrases).
+
+    Key insight: Only flag patterns at the END of responses.
+    Claude often says "Let me..." then immediately does it in the same response.
+    GPT says "I'll..." at the end and stops.
+
+    Position-aware detection prevents false positives for Claude while still
+    catching GPT's premature exits.
     """
     if not text:
         return False, []
@@ -113,10 +120,22 @@ def _detect_narrate_then_act(text: str) -> tuple[bool, list[str]]:
     if _has_completion_signal(text):
         return False, []
 
+    # Only check the TRAILING portion of the response
+    # If narration appears early followed by substantial content, it's fine
+    trailing_window = 300  # chars from end to check
+    min_content_after = 100  # chars after pattern to consider it "followed by content"
+
+    trailing_text = text[-trailing_window:] if len(text) > trailing_window else text
+
     matched = []
     for pattern in NARRATE_PATTERNS_COMPILED:
-        for match in pattern.finditer(text):
-            matched.append(match.group(0))
+        for match in pattern.finditer(trailing_text):
+            # Calculate position relative to end of full text
+            match_end_from_text_end = len(trailing_text) - match.end()
+
+            # Only flag if pattern is near the very end with little content after
+            if match_end_from_text_end < min_content_after:
+                matched.append(match.group(0))
 
     return len(matched) > 0, matched[:3]
 
@@ -357,7 +376,7 @@ def main():
     )
     parser.add_argument(
         "--provider", "-p",
-        choices=["anthropic", "openai"],
+        choices=["anthropic", "openai", "openrouter"],
         default="anthropic",
         help="Model provider (default: anthropic)",
     )
