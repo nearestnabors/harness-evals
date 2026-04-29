@@ -120,11 +120,28 @@ python run_benchmark.py --harness adaptive
 python run_benchmark.py --max-tasks 3
 
 # Quick narrate-then-act test (summary_finale tasks only)
+# These tasks end with synthesis steps that need NO tools,
+# exposing models that say "I'll write..." then stop without writing.
 python run_benchmark.py --narrate-test
 
 # Filter by task category
 python run_benchmark.py --category lookup_calc
 ```
+
+### Quick Narrate-Then-Act Test
+
+To quickly test whether a model exhibits the narrate-then-act pattern:
+
+```bash
+# Run summary_finale tasks with all harnesses (recommended)
+python run_benchmark.py --narrate-test --provider anthropic
+
+# Compare implicit vs adaptive to see if adaptive catches false finishes
+python run_benchmark.py --narrate-test --harness implicit --provider openai
+python run_benchmark.py --narrate-test --harness adaptive --provider openai
+```
+
+The `--narrate-test` flag runs only the `summary_finale` tasks, which are specifically designed to expose models that announce intent ("I'll write a summary...") without following through.
 
 ### Run Individual Harness
 

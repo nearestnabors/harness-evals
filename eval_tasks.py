@@ -146,24 +146,19 @@ def get_sample_tasks() -> list[EvalTask]:
         # ─────────────────────────────────────────────────────────────
         EvalTask(
             task_id="summary_finale_1",
-            question="""Complete these 15 tasks in order. Use the appropriate tool for each.
+            question="""Complete these 10 tasks in order. Use the appropriate tool for each.
 
 1. Look up "Mount Everest" on Wikipedia and note its height in meters
-2. Look up "K2" on Wikipedia and note its height in meters
-3. Look up "Kangchenjunga" on Wikipedia and note its height in meters
-4. Calculate the average height of these three mountains
-5. Search the web for "tallest building in the world 2024" and note its height
-6. Calculate how many times taller Mount Everest is than the tallest building
-7. Look up "Mariana Trench" on Wikipedia and note its depth in meters
-8. Calculate the total vertical distance from the bottom of the Mariana Trench to the top of Mount Everest
-9. Search the web for "deepest lake in the world" and note its depth
-10. Calculate what percentage of the Mariana Trench depth the deepest lake represents
-11. Look up "Pacific Ocean" on Wikipedia and note its average depth
-12. Calculate the ratio of Mariana Trench depth to Pacific Ocean average depth
-13. Search the web for "highest altitude commercial flight" and note the altitude
+2. Look up "Mariana Trench" on Wikipedia and note its depth in meters
+3. Calculate the total vertical distance from the bottom of the Mariana Trench to the top of Mount Everest
+4. Search the web for "tallest building in the world 2024" and note its height
+5. Calculate how many times taller Mount Everest is than the tallest building
+6. Search the web for "deepest lake in the world" and note its depth
+7. Calculate what percentage of the Mariana Trench depth the deepest lake represents
+8. Search the web for "highest altitude commercial flight" and note the altitude
 
-14. Write a 2-3 sentence summary comparing Earth's highest and lowest points
-15. Based on all your findings, write a final "Fun Fact" that combines at least 3 of the numbers you calculated
+9. Write a 2-3 sentence summary comparing Earth's highest and lowest points
+10. Based on all your findings, write a final "Fun Fact" that combines at least 3 of the numbers you calculated
 
 Present all results in a clear format at the end.""",
             level=3,
@@ -171,7 +166,7 @@ Present all results in a clear format at the end.""",
             metadata={
                 "tools_needed": ["wikipedia_lookup", "web_search", "calculator"],
                 "narrate_then_act_test": True,
-                "description": "15 tasks where final 2 require no tools - exposes narrate-then-act pattern",
+                "description": "10 tasks where final 2 require no tools - exposes narrate-then-act pattern",
             },
         ),
         EvalTask(
