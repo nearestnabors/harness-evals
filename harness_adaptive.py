@@ -82,7 +82,7 @@ COMPLETION_SIGNALS = [
     r"\bIn\s+conclusion\b",
     r"\bTo\s+summarize\b",
     r"\bIn\s+summary\b",
-    r"\b✅\b",
+    r"✅",
     r"\bhas\s+been\s+(fully\s+)?answered\b",
     r"\bquestion\s+has\s+been\s+(fully\s+)?(answered|solved|completed)\b",
     r"\btask\s+is\s+complete\b",
