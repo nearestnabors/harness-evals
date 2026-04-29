@@ -192,6 +192,9 @@ def print_results_table(results: list[TaskResult]) -> None:
         if r.error:
             correct_str = f"[red]Err[/red]"
 
+        # Implicit harness can't detect false finishes, show "-" instead of 0
+        ff_str = "-" if r.harness == "implicit" else str(r.false_finishes)
+
         table.add_row(
             r.task_id[:12],
             str(r.level),
@@ -201,7 +204,7 @@ def print_results_table(results: list[TaskResult]) -> None:
             correct_str,
             str(r.iterations),
             str(r.tool_calls),
-            str(r.false_finishes),
+            ff_str,
             f"{r.total_tokens:,}",
             r.finished_reason[:15],
         )
@@ -243,6 +246,8 @@ def print_summary(results: list[TaskResult]) -> None:
         total_tokens = sum(r.total_tokens for r in hrs)
 
         correct_str = f"{correct}/{checkable}" if checkable else "N/A"
+        # Implicit harness can't detect false finishes
+        ff_str = "-" if harness == "implicit" else str(total_ff)
 
         summary_table.add_row(
             f"Harness {harness}",
@@ -251,7 +256,7 @@ def print_summary(results: list[TaskResult]) -> None:
             correct_str,
             f"{avg_iters:.1f}",
             f"{avg_tools:.1f}",
-            str(total_ff),
+            ff_str,
             f"{total_tokens:,}",
         )
 
