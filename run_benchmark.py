@@ -272,6 +272,16 @@ def main():
         type=int,
         help="Maximum number of tasks to run (default: all)",
     )
+    parser.add_argument(
+        "--category",
+        type=str,
+        help="Filter tasks by category prefix (e.g., 'summary_finale', 'lookup_calc')",
+    )
+    parser.add_argument(
+        "--narrate-test",
+        action="store_true",
+        help="Quick test: run only summary_finale tasks (exposes narrate-then-act pattern)",
+    )
 
     # Harness selection
     parser.add_argument(
@@ -305,6 +315,16 @@ def main():
     console.print(Rule("[bold]Loading Evaluation Tasks[/bold]"))
     tasks = get_sample_tasks()
     console.print(f"Loaded {len(tasks)} multi-step evaluation tasks")
+
+    # Filter by category
+    category = args.category
+    if args.narrate_test:
+        category = "summary_finale"
+        console.print("[yellow]Running narrate-then-act test (summary_finale tasks only)[/yellow]")
+
+    if category:
+        tasks = [t for t in tasks if t.task_id.startswith(category)]
+        console.print(f"Filtered to {len(tasks)} tasks matching '{category}'")
 
     if args.max_tasks and len(tasks) > args.max_tasks:
         tasks = tasks[: args.max_tasks]

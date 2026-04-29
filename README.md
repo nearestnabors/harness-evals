@@ -118,6 +118,12 @@ python run_benchmark.py --harness adaptive
 
 # Limit tasks
 python run_benchmark.py --max-tasks 3
+
+# Quick narrate-then-act test (summary_finale tasks only)
+python run_benchmark.py --narrate-test
+
+# Filter by task category
+python run_benchmark.py --category lookup_calc
 ```
 
 ### Run Individual Harness
